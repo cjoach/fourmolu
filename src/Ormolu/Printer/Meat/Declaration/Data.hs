@@ -256,7 +256,7 @@ isInfix = \case
 isSingleConstRec :: [LConDecl GhcPs] -> Bool
 isSingleConstRec [(L _ ConDeclH98 {..})] =
   case con_args of
-    RecCon _ -> True
+    RecCon _ -> False
     _ -> False
 isSingleConstRec _ = False
 
