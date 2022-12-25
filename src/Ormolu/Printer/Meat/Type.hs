@@ -131,8 +131,15 @@ p_hsType' multilineArgs docStyle = \case
     let parens' =
           case tsort of
             HsUnboxedTuple -> parensHash N
-            HsBoxedOrConstraintTuple -> parens N
-     in parens' $ sep commaDel (sitcc . located' p_hsType) xs
+            HsBoxedOrConstraintTuple -> parensSpace N
+        empty =
+          case tsort of
+            HsUnboxedTuple -> txt "(# #)"
+            HsBoxedOrConstraintTuple -> txt "()"
+     in
+      case xs of
+        [] -> empty
+        _ -> parens' $ sep commaDel (sitcc . located' p_hsType) xs
   HsSumTy _ xs ->
     parensHash N $
       sep (space >> txt "|" >> breakpoint) (sitcc . located' p_hsType) xs

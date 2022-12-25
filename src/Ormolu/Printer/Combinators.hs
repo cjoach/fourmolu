@@ -55,7 +55,9 @@ module Ormolu.Printer.Combinators
     banana,
     braces,
     brackets,
+    bracketsSpace,
     parens,
+    parensSpace,
     parensHash,
     pragmaBraces,
     pragma,
@@ -283,15 +285,21 @@ banana = brackets_ True token'oparenbar token'cparenbar
 
 -- | Surround given entity by curly braces @{@ and  @}@.
 braces :: BracketStyle -> R () -> R ()
-braces = brackets_ False (txt "{") (txt "}")
+braces = brackets_ True (txt "{") (txt "}")
 
 -- | Surround given entity by square brackets @[@ and @]@.
 brackets :: BracketStyle -> R () -> R ()
 brackets = brackets_ False (txt "[") (txt "]")
 
+bracketsSpace :: BracketStyle -> R () -> R ()
+bracketsSpace = brackets_ True (txt "[") (txt "]")
+
 -- | Surround given entity by parentheses @(@ and @)@.
 parens :: BracketStyle -> R () -> R ()
 parens = brackets_ False (txt "(") (txt ")")
+
+parensSpace :: BracketStyle -> R () -> R ()
+parensSpace = brackets_ True (txt "(") (txt ")")
 
 -- | Surround given entity by @(# @ and @ #)@.
 parensHash :: BracketStyle -> R () -> R ()
@@ -345,8 +353,8 @@ brackets_ needBreaks open close style m = sitcc (vlayout singleLine multiLine)
       case commaStyle of
         Leading ->
           if needBreaks
-            then inci $ newline >> m
-            else inciIf (style == S) $ space >> m
+            then inciIf (style == S) $ space >> m
+            else inciIf (style == S) m
         Trailing ->
           if needBreaks
             then newline >> inci m

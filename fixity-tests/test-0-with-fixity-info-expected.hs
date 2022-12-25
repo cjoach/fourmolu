@@ -6,4 +6,4 @@ instance A.ToJSON UpdateTable where
         : case updateGlobalSecondaryIndexUpdates a of
           [] -> []
 
-          l -> ["GlobalSecondaryIndexUpdates" .= l]
+          l -> [ "GlobalSecondaryIndexUpdates" .= l ]

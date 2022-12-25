@@ -725,7 +725,7 @@ p_hsExpr' s = \case
             Missing _ -> pure ()
         parens' =
           case boxity of
-            Boxed -> parens
+            Boxed -> parensSpace
             Unboxed -> parensHash
     enclSpan <-
       fmap (flip RealSrcSpan Strict.Nothing) . maybeToList
@@ -779,7 +779,7 @@ p_hsExpr' s = \case
       MonadComp -> compBody
       GhciStmtCtxt -> notImplemented "GhciStmtCtxt"
   ExplicitList _ xs ->
-    brackets s $
+    bracketsSpace s $
       sep commaDel (sitcc . located' p_hsExprListItem) xs
   RecordCon {..} -> do
     p_rdrName rcon_con
@@ -1113,11 +1113,13 @@ p_pat = \case
     txt "!"
     located pat p_pat
   ListPat _ pats ->
-    brackets S $ sep commaDel (located' p_pat) pats
+    case pats of
+      [] -> txt "[]"
+      _ -> bracketsSpace S $ sep commaDel (located' p_pat) pats
   TuplePat _ pats boxing -> do
     let parens' =
           case boxing of
-            Boxed -> parens S
+            Boxed -> parensSpace S
             Unboxed -> parensHash S
     parens' $ sep commaDel (sitcc . located' p_pat) pats
   SumPat _ pat tag arity ->
