@@ -18,6 +18,7 @@ module Ormolu.Printer.Internal
     atom,
     space,
     newline,
+    newline2,
     declNewline,
     askSourceType,
     askFixityOverrides,
@@ -368,6 +369,31 @@ newline = do
               unless (T.null text) $
                 spit CommentPart text
               newlineRaw
+         in local modRC m
+      R . modify $ \sc ->
+        sc
+          { scPendingComments = []
+          }
+
+newline2 :: R ()
+newline2 = do
+  indent <- R (gets scIndent)
+  cs <- reverse <$> R (gets scPendingComments)
+  case cs of
+    [] -> newlineRawN 2
+    ((position, _) : _) -> do
+      case position of
+        OnTheSameLine -> space
+        OnNextLine -> newlineRawN 2
+      R . forM_ cs $ \(_, text) ->
+        let modRC rc =
+              rc
+                { rcIndent = indent
+                }
+            R m = do
+              unless (T.null text) $
+                spit CommentPart text
+              newlineRawN 2
          in local modRC m
       R . modify $ \sc ->
         sc
