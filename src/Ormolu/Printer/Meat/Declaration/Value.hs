@@ -1048,7 +1048,10 @@ p_let' inDo letLoc localBinds mBody = do
                   else letStartLine == localBindsStartLine
           LetInline -> True
           LetNewline -> False
-          LetMixed -> numLocalBinds <= 1
+          LetMixed ->
+            case mBody of
+              Just _ -> False
+              Nothing -> numLocalBinds <= 1
   -- isInShifted = True if "in" should be right-aligned with "let"
   let isInShifted = inDo || inStyle == InRightAlign
 
@@ -1073,7 +1076,10 @@ p_let' inDo letLoc localBinds mBody = do
                   | isInShifted = " in"
                   | isBlockInline = "in "
                   | otherwise = "in"
-            block in_ body
+            txt in_
+            if isBlockInline
+              then space >> sitcc body
+              else newline >> inciIf isInShifted body
       Nothing -> pure ()
   where
     numLocalBinds =
