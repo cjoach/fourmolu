@@ -36,6 +36,7 @@ module Ormolu.Printer.Combinators
     vlayout,
     getLayout,
     breakpoint,
+    breakpoint2,
     breakpoint',
     getPrinterOpt,
 
@@ -175,6 +176,9 @@ spansLayout = \case
 -- > breakpoint = vlayout space newline
 breakpoint :: R ()
 breakpoint = vlayout space newline
+
+breakpoint2 :: R ()
+breakpoint2 = vlayout space newline2
 
 -- | Similar to 'breakpoint' but outputs nothing in case of single-line
 -- layout.

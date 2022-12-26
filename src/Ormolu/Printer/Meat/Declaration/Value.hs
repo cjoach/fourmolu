@@ -982,21 +982,20 @@ p_if ::
   -- | Else
   LocatedA body ->
   R ()
-p_if placer render if' then' else' = do
+p_if _ render if' then' else' = do
   txt "if"
   space
   located if' p_hsExpr
+  space
+  txt "then"
   breakpoint
-  inci $ do
-    txt "then"
-    space
-    located then' $ \x ->
-      placeHanging (placer x) (render x)
-    breakpoint
-    txt "else"
-    space
-    located else' $ \x ->
-      placeHanging (placer x) (render x)
+  located then' $ \x ->
+    inci (render x)
+  breakpoint2
+  txt "else"
+  breakpoint
+  located else' $ \x ->
+    inci (render x)
 
 p_let ::
   -- | True if in do-block
