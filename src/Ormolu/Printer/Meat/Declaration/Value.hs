@@ -1378,6 +1378,7 @@ exprPlacement = \case
   OpApp _ _ op y ->
     case (fmap getOpNameStr . getOpName . unLoc) op of
       Just "$" -> exprPlacement (unLoc y)
+      Just "<|" -> exprPlacement (unLoc y)
       _ -> Normal
   HsApp _ _ y -> exprPlacement (unLoc y)
   HsProc _ p _ ->
