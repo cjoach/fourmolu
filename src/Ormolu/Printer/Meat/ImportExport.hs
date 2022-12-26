@@ -90,11 +90,10 @@ p_lie encLayout relativePos = \case
       located l1 p_ieWrappedName
   IEThingAll _ l1 -> withComma $ do
     located l1 p_ieWrappedName
-    space
     txt "(..)"
   IEThingWith _ l1 w xs -> sitcc . withComma $ do
     located l1 p_ieWrappedName
-    breakIfNotDiffFriendly
+    breakIfNotDiffFriendly'
     inci $ do
       let names :: [R ()]
           names = located' p_ieWrappedName <$> xs
@@ -219,3 +218,9 @@ breakIfNotDiffFriendly =
   getPrinterOpt poImportExportStyle >>= \case
     ImportExportDiffFriendly -> space
     _ -> breakpoint
+
+breakIfNotDiffFriendly' :: R ()
+breakIfNotDiffFriendly' =
+  getPrinterOpt poImportExportStyle >>= \case
+    ImportExportDiffFriendly -> return ()
+    _ -> breakpoint'
