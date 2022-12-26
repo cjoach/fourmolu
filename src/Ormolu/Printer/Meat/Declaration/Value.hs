@@ -1407,16 +1407,4 @@ breakpointPreRecordBrace = do
 -- rather than sometimes indenting by 2 regardless of 'poIndentation'.
 p_hsExprListItem :: HsExpr GhcPs -> R ()
 p_hsExprListItem e = do
-  indent <- getPrinterOpt poIndentation
-  when (listLike e) $ do
-    getPrinterOpt poCommaStyle >>= \case
-      Leading -> breakpoint'
-      Trailing -> pure ()
-    vlayout (pure ()) (spaces $ indent - 2)
   p_hsExpr e
-  where
-    spaces n = txt $ Text.replicate n " "
-    listLike = \case
-      ExplicitList {} -> True
-      ExplicitTuple {} -> True
-      _ -> False
