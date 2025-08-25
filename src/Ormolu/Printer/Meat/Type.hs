@@ -99,7 +99,9 @@ p_hsType = \case
     let parens' =
           case tsort of
             HsUnboxedTuple -> parensHash N
-            HsBoxedOrConstraintTuple -> parens N
+            HsBoxedOrConstraintTuple ->
+              if null xs then parens N
+              else parensSpace N
      in parens' $ sep commaDel (sitcc . located' p_hsType) xs
   HsSumTy _ xs ->
     parensHash N $
