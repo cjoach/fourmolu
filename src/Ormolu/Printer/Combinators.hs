@@ -60,6 +60,8 @@ module Ormolu.Printer.Combinators
     braces,
     brackets,
     parens,
+    bracketsSpace,
+    parensSpace,
     parensHash,
     pragmaBraces,
     pragma,
@@ -308,6 +310,12 @@ brackets = brackets_ False (txt "[") (txt "]")
 parens :: BracketStyle -> R () -> R ()
 parens = brackets_ False (txt "(") (txt ")")
 
+bracketsSpace :: BracketStyle -> R () -> R ()
+bracketsSpace = brackets_ True (txt "[") (txt "]")
+
+parensSpace :: BracketStyle -> R () -> R ()
+parensSpace = brackets_ True (txt "(") (txt ")")
+
 -- | Surround given entity by @(# @ and @ #)@.
 parensHash :: BracketStyle -> R () -> R ()
 parensHash = brackets_ True (txt "(#") (txt "#)")
@@ -359,9 +367,9 @@ brackets_ needBreaks open close style m = sitcc (vlayout singleLine multiLine)
       commaStyle <- getPrinterOpt poCommaStyle
       case commaStyle of
         Leading ->
-          if needBreaks
-            then inci $ newline >> m
-            else inciIf (style == S) $ space >> m
+            inciIf (style == S) $
+              if needBreaks then space >> m
+              else m
         Trailing ->
           if needBreaks
             then newline >> inci m
