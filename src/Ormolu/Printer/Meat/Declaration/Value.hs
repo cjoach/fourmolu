@@ -764,7 +764,7 @@ p_hsExpr' isApp s = \case
       MonadComp -> p_listComp s es
       GhciStmtCtxt -> notImplemented "GhciStmtCtxt"
   ExplicitList _ xs ->
-    brackets s $
+    bracketsSpace s $
       sep commaDel (sitcc . located' p_hsExprListItem) xs
   RecordCon {..} -> do
     p_rdrName rcon_con
@@ -1261,7 +1261,7 @@ p_pat = \case
     txt "!"
     located pat p_pat
   ListPat _ pats ->
-    brackets S $ sep commaDel (located' p_pat) pats
+    bracketsSpace S $ sep commaDel (located' p_pat) pats
   TuplePat _ pats boxing -> do
     let parens' =
           case boxing of
