@@ -101,13 +101,11 @@ p_lie encLayout isAllPrevDoc relativePos = \case
   IEThingAll _ l1 exportDoc -> do
     withComma $ do
       located l1 p_ieWrappedName
-      space
       txt "(..)"
     p_exportDoc exportDoc
   IEThingWith _ l1 w xs exportDoc -> sitcc $ do
     withComma $ do
       located l1 p_ieWrappedName
-      breakIfNotDiffFriendly
       inci $ do
         let names :: [R ()]
             names = located' p_ieWrappedName <$> xs
