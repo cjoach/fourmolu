@@ -728,7 +728,7 @@ p_hsExpr' isApp s = \case
             Missing _ -> pure ()
         parens' =
           case boxity of
-            Boxed -> parens
+            Boxed -> parensSpace
             Unboxed -> parensHash
     enclSpan <-
       fmap (flip RealSrcSpan Strict.Nothing) . maybeToList
@@ -1265,7 +1265,7 @@ p_pat = \case
   TuplePat _ pats boxing -> do
     let parens' =
           case boxing of
-            Boxed -> parens S
+            Boxed -> parensSpace S
             Unboxed -> parensHash S
     parens' $ sep commaDel (sitcc . located' p_pat) pats
   OrPat _ pats ->
