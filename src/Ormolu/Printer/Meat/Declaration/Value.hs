@@ -1175,7 +1175,7 @@ p_let' inDo letLoc localBinds mBody = do
   inStyle <- getPrinterOpt poInStyle
   layout <- getLayout
   -- isAllInline = True if whole "let ... in ..." should be one line
-  let isAllInline = layout == SingleLine && (not inDo || isJust mBody)
+  let isAllInline = layout == SingleLine
   -- isBlockInline = True if each "let ..." + "in ..." block should be one line
   let isBlockInline =
         case letStyle of
@@ -1202,7 +1202,7 @@ p_let' inDo letLoc localBinds mBody = do
           _ | inDo -> " in"
           InRightAlign -> " in"
           InLeftAlign
-            | isBlockInline -> "in "
+            | isBlockInline -> "in"
             | otherwise -> "in"
           InNoSpace -> "in"
 
@@ -1223,7 +1223,9 @@ p_let' inDo letLoc localBinds mBody = do
             block "in" body
         | otherwise -> do
             newline
-            block inString body
+            txt inString
+            newline
+            body
       Nothing -> pure ()
   where
     numLocalBinds =
