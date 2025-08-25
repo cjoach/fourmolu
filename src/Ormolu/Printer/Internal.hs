@@ -18,6 +18,7 @@ module Ormolu.Printer.Internal
     atom,
     space,
     newline,
+    newlineRaw,
     declNewline,
     multilineCommentNewline,
     askSourceType,

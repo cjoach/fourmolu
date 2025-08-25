@@ -1144,6 +1144,7 @@ p_if placer render anns if' then' else' = do
     space
     placeBranch thenSpan then'
     breakpoint
+    newlineRaw
     locatedToken elseSpan "else"
     space
     placeBranch elseSpan else'
