@@ -49,6 +49,7 @@ module Ormolu.Printer.Combinators
     -- ** Formatting lists
     sep,
     sepSemi,
+    sepSemi2,
     canUseBraces,
     useBraces,
     dontUseBraces,
@@ -276,6 +277,30 @@ sepSemi f xs = vlayout singleLine multiLine
             else sep (txt ";" >> space) f xs'
     multiLine =
       sep newline (dontUseBraces . f) xs
+
+sepSemi2 ::
+  -- | How to render an element
+  (a -> R ()) ->
+  -- | Elements to render
+  [a] ->
+  R ()
+sepSemi2 f xs = vlayout singleLine multiLine
+  where
+    singleLine = do
+      ub <- canUseBraces
+      case xs of
+        [] -> when ub $ txt "{}"
+        xs' ->
+          if ub
+            then do
+              txt "{"
+              space
+              sep (txt ";" >> space) (dontUseBraces . f) xs'
+              space
+              txt "}"
+            else sep (txt ";" >> space) f xs'
+    multiLine =
+      sep (newline >> newlineRaw) (dontUseBraces . f) xs
 
 ----------------------------------------------------------------------------
 -- Wrapping
