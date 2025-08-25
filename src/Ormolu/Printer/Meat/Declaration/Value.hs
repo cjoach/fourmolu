@@ -109,7 +109,7 @@ p_matchGroup' placer render style mg@MG {..} = do
   -- Since we are forcing braces on 'sepSemi' based on 'ob', we have to
   -- restore the brace state inside the sepsemi.
   ub <- bool dontUseBraces useBraces <$> canUseBraces
-  ob $ sepSemi (located' (ub . p_Match)) (unLoc mg_alts)
+  ob $ sepSemi2 (located' (ub . p_Match)) (unLoc mg_alts)
   where
     p_Match m@Match {..} =
       p_match'
