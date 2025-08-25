@@ -300,7 +300,7 @@ banana = brackets_ True token'oparenbar token'cparenbar
 
 -- | Surround given entity by curly braces @{@ and  @}@.
 braces :: BracketStyle -> R () -> R ()
-braces = brackets_ False (txt "{") (txt "}")
+braces = brackets_ True (txt "{") (txt "}")
 
 -- | Surround given entity by square brackets @[@ and @]@.
 brackets :: BracketStyle -> R () -> R ()
