@@ -1553,6 +1553,6 @@ p_hsExprListItem e = do
   where
     spaces n = txt $ Text.replicate n " "
     listLike = \case
-      ExplicitList {} -> True
-      ExplicitTuple {} -> True
+      ExplicitList {} -> False
+      ExplicitTuple {} -> False
       _ -> False
