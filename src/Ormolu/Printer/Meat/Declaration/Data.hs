@@ -193,7 +193,7 @@ p_conDecl _ ConDeclGADT {..} = do
     conArgsSpans = case con_g_args of
       PrefixConGADT NoExtField xs -> getLocA . hsScaledThing <$> xs
       RecConGADT _ x -> [getLocA x]
-p_conDecl singleRecCon ConDeclH98 {..} =
+p_conDecl _ ConDeclH98 {..} =
   case con_args of
     PrefixCon (_ :: [Void]) xs -> do
       renderConDoc
@@ -212,7 +212,7 @@ p_conDecl singleRecCon ConDeclH98 {..} =
       switchLayout conDeclSpn $ do
         p_rdrName con_name
         breakpoint
-        inciIf (Choice.isFalse singleRecCon) (located l p_conDeclFields)
+        inci (located l p_conDeclFields)
     InfixCon (HsScaled _ l) (HsScaled _ r) -> do
       -- manually render these
       let (lType, larg_doc) = splitDocTy l
