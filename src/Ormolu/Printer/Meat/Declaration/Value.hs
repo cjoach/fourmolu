@@ -293,7 +293,11 @@ p_match' placer render style isInfix multAnn strictness m_pats GRHSs {..} = do
         PatternBind -> space >> inci equals
         s | isCase s && hasGuards -> return ()
         _ -> space >> token'rarrow
-    switchLayout [patGrhssSpan] $
+    let switchLayout' = case style of
+          Case -> enterLayout MultiLine
+          LambdaCase -> enterLayout MultiLine
+          _ -> switchLayout [patGrhssSpan]
+    switchLayout' $
       placeHanging placement p_body
     inci p_where
 
