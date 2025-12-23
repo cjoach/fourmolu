@@ -14,7 +14,7 @@ where
 import Control.Monad
 import Data.Choice (pattern Without)
 import Data.Foldable (for_, traverse_)
-import Data.List (inits)
+import Data.List (inits, sortOn)
 import Data.Text qualified as T
 import GHC.Hs
 import GHC.LanguageExtensions.Type
@@ -25,20 +25,37 @@ import Ormolu.Printer.Combinators
 import Ormolu.Printer.Meat.Common
 import Ormolu.Printer.Meat.Declaration.Warning
 import Ormolu.Utils (RelativePos (..), attachRelativePos)
+import GHC.Types.Name.Reader (rdrNameOcc)
+import GHC.Types.Name.Occurrence (occNameString, occName, isSymOcc)
 
 p_hsmodExports :: [LIE GhcPs] -> R ()
 p_hsmodExports xs =
+  let
+    sortKey name = if isSymOcc (occName name) then 2 else 1
+    wrappedNameStr = occNameString . rdrNameOcc . ieWrappedName
+    ieKey :: IE GhcPs -> (Int, String)
+    ieKey = \case
+      IEModuleContents _ (L _ n)   -> (0, moduleNameString n)
+      IEVar _ (L _ n) _            -> (sortKey n, wrappedNameStr n)
+      IEThingAbs _ (L _ n) _       -> (sortKey n, wrappedNameStr n)
+      IEThingAll _ (L _ n) _       -> (sortKey n, wrappedNameStr n)
+      IEThingWith _ (L _ n) _ _ _  -> (sortKey n, wrappedNameStr n)
+      _ -> (3, "")
+    sortedXs = sortOn (ieKey . unLoc) xs
+  in
   parens' False $ do
     layout <- getLayout
     sep
       breakpoint
       (\(isAllPrevDoc, p, l) -> sitcc (located (addDocSrcSpan l) (p_lie layout isAllPrevDoc p)))
-      (withAllPrevDoc $ attachRelativePos xs)
+      (withAllPrevDoc $ attachRelativePos sortedXs)
   where
     -- In order to correctly set the layout when a doc comment is present.
     addDocSrcSpan lie@(L l ie) = case ieExportDoc ie of
       Nothing -> lie
       Just (L l' _) -> L (l <> noAnnSrcSpan l') ie
+
+
 
 p_hsmodImport :: ImportDecl GhcPs -> R ()
 p_hsmodImport ImportDecl {..} = do
