@@ -295,8 +295,9 @@ p_forallBndrsEnd extraSpace = \case
     dot = if Choice.isTrue extraSpace then " ." else "."
 
 p_conDeclFields :: [LConDeclField GhcPs] -> R ()
-p_conDeclFields xs =
-  braces N $ sep commaDel (sitcc . located' p_conDeclField) xs
+p_conDeclFields xs
+  | null xs = txt "{}"
+  | otherwise = braces N $ sep commaDel (sitcc . located' p_conDeclField) xs
 
 p_conDeclField :: ConDeclField GhcPs -> R ()
 p_conDeclField ConDeclField {..} = do

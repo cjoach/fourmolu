@@ -779,8 +779,10 @@ p_hsExpr' isApp s = \case
         dotdot = case rec_dotdot of
           Just {} -> [txt ".."]
           Nothing -> []
-    inci . braces N $
-      sep commaDel sitcc (fields <> dotdot)
+    if null fields && null dotdot
+      then inci $ txt "{}"
+      else inci . braces N $
+        sep commaDel sitcc (fields <> dotdot)
   RecordUpd {..} -> do
     located rupd_expr p_hsExpr
     breakpointPreRecordBrace
@@ -1023,9 +1025,12 @@ p_patSynBind PSB {..} = do
       inci $ do
         let conSpans = getLocA . recordPatSynPatVar <$> xs
         switchLayout conSpans $ do
-          unless (null xs) breakpointPreRecordBrace
-          braces N $
-            sep commaDel (p_rdrName . recordPatSynPatVar) xs
+          if null xs
+            then txt "{}"
+            else do
+              breakpointPreRecordBrace
+              braces N $
+                sep commaDel (p_rdrName . recordPatSynPatVar) xs
         rhs conSpans
     InfixCon l r -> do
       let conSpans = [getLocA l, getLocA r]
@@ -1287,14 +1292,19 @@ p_pat = \case
             (Left <$> tys) <> (Right <$> xs)
       RecCon (HsRecFields _ fields dotdot) -> do
         p_rdrName pat
-        breakpointPreRecordBrace
-        let f = \case
-              Nothing -> txt ".."
-              Just x -> located x p_pat_hsFieldBind
-        inci . braces N . sep commaDel f $
-          case dotdot of
-            Nothing -> Just <$> fields
-            Just (L _ (RecFieldsDotDot n)) -> (Just <$> take n fields) ++ [Nothing]
+        if null fields && isNothing dotdot
+          then do
+            breakpointPreRecordBrace
+            inci $ txt "{}"
+          else do
+            breakpointPreRecordBrace
+            let f = \case
+                  Nothing -> txt ".."
+                  Just x -> located x p_pat_hsFieldBind
+            inci . braces N . sep commaDel f $
+              case dotdot of
+                Nothing -> Just <$> fields
+                Just (L _ (RecFieldsDotDot n)) -> (Just <$> take n fields) ++ [Nothing]
       InfixCon l r -> do
         switchLayout [getLocA l, getLocA r] $ do
           located l p_pat
