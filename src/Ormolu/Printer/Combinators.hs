@@ -22,6 +22,7 @@ module Ormolu.Printer.Combinators
     atom,
     space,
     newline,
+    newlineRaw, -- ORISHA(else-blank-line)
     declNewline,
     multilineCommentNewline,
     newlineLiteral,
@@ -38,6 +39,9 @@ module Ormolu.Printer.Combinators
     switchLayout,
     switchLayoutWithEnclosingComments,
     switchLayoutNoLimit,
+    BindContext (..), -- ORISHA(bind-newline-after-equals)
+    withBindContext, -- ORISHA(bind-newline-after-equals)
+    getBindContext, -- ORISHA(bind-newline-after-equals)
     spansLayout,
     enterLayout,
     Layout (..),
@@ -52,6 +56,8 @@ module Ormolu.Printer.Combinators
     sep,
     sepSemi,
     sepSemi',
+    sepSemiWith, -- ORISHA(case-alt-blank-line, let-blank-lines)
+    sepSemi2, -- ORISHA(case-alt-blank-line)
     canUseBraces,
     useBraces,
     dontUseBraces,
@@ -65,6 +71,9 @@ module Ormolu.Printer.Combinators
     recordBraces,
     brackets,
     parens,
+    recordBracesOrEmpty, -- ORISHA(empty-braces-no-space)
+    bracketsSpace, -- ORISHA(spaced-brackets)
+    parensSpace, -- ORISHA(spaced-brackets)
     parensHash,
     pragmaBraces,
     pragma,
@@ -341,7 +350,21 @@ sepSemi' ::
   -- | Elements to render
   [a] ->
   R ()
-sepSemi' addMultiColSemi f xs = vlayout singleLine multiLine
+sepSemi' addMultiColSemi =
+  sepSemiWith (const (if addMultiColSemi then txt ";" >> newline else newline))
+
+-- | ORISHA(case-alt-blank-line): upstream inlines this body in 'sepSemi'' with
+-- the multi-line separator chosen by a @Bool@. We factor the separator out so
+-- 'sepSemi2' can reuse the single-line brace rendering instead of copying it.
+sepSemiWith ::
+  -- | Separator in multi-line layout, given the /preceding/ element
+  (a -> R ()) ->
+  -- | How to render an element
+  (a -> R ()) ->
+  -- | Elements to render
+  [a] ->
+  R ()
+sepSemiWith msep f xs = vlayout singleLine multiLine
   where
     singleLine = do
       ub <- canUseBraces
@@ -356,11 +379,23 @@ sepSemi' addMultiColSemi f xs = vlayout singleLine multiLine
               space
               txt "}"
             else sep (txt ";" >> space) f xs'
-    multiLine =
-      sep
-        (if addMultiColSemi then txt ";" >> newline else newline)
-        (dontUseBraces . f)
-        xs
+    multiLine = case xs of
+      [] -> pure ()
+      x0 : rest -> do
+        dontUseBraces (f x0)
+        forM_ (zip xs rest) $ \(prev, cur) ->
+          msep prev >> dontUseBraces (f cur)
+
+-- | ORISHA(case-alt-blank-line): like 'sepSemi', but separates multiline
+-- alternatives with a blank line instead of a single newline. Used only by
+-- 'p_matchGroup'' for case/lambda-case alts.
+sepSemi2 ::
+  -- | How to render an element
+  (a -> R ()) ->
+  -- | Elements to render
+  [a] ->
+  R ()
+sepSemi2 = sepSemiWith (const (newline >> newlineRaw))
 
 ----------------------------------------------------------------------------
 -- Wrapping
@@ -386,8 +421,11 @@ banana :: BracketStyle -> R () -> R ()
 banana = brackets_ True token'oparenbar token'cparenbar
 
 -- | Surround the given entity with curly braces @{@ and @}@.
+--
+-- ORISHA(braces-always-spaces): upstream passes @False@ here, so record
+-- braces render as @{a = 1}@. We always pad: @{ a = 1 }@.
 braces :: BracketStyle -> R () -> R ()
-braces = brackets_ False (txt "{") (txt "}")
+braces = brackets_ True (txt "{") (txt "}")
 
 -- | Surround the given entity with square brackets @[@ and @]@.
 brackets :: BracketStyle -> R () -> R ()
@@ -396,6 +434,23 @@ brackets = brackets_ False (txt "[") (txt "]")
 -- | Surround the given entity with parentheses @(@ and @)@.
 parens :: BracketStyle -> R () -> R ()
 parens = brackets_ False (txt "(") (txt ")")
+
+-- | ORISHA(empty-braces-no-space): 'recordBraces', but an empty record renders
+-- as @{}@ rather than @{ }@ (our 'braces' always pads). The body still runs
+-- when empty so comments placed inside the braces (see 'locatedEmpty') are
+-- printed there.
+recordBracesOrEmpty :: Bool -> R () -> R ()
+recordBracesOrEmpty isEmpty m =
+  if isEmpty then txt "{" >> m >> txt "}" else recordBraces m
+
+-- | ORISHA(spaced-brackets): padded variants of 'brackets' and 'parens'.
+-- Upstream has no equivalent; call sites that should pad use these instead.
+bracketsSpace :: BracketStyle -> R () -> R ()
+bracketsSpace = brackets_ True (txt "[") (txt "]")
+
+-- | See 'bracketsSpace'. ORISHA(spaced-brackets)
+parensSpace :: BracketStyle -> R () -> R ()
+parensSpace = brackets_ True (txt "(") (txt ")")
 
 -- | Surround the given entity with @(# @ and @ #)@.
 parensHash :: BracketStyle -> R () -> R ()
@@ -447,10 +502,13 @@ brackets_ needBreaks open close style m = sitcc (vlayout singleLine multiLine)
       open
       commaStyle <- getPrinterOpt poCommaStyle
       case commaStyle of
+        -- ORISHA(braces-always-spaces): upstream breaks the line after the
+        -- opening bracket when needBreaks; we keep the content on the same
+        -- line and pad it with a space instead.
         Leading ->
-          if needBreaks
-            then inci $ newline >> m
-            else inciIf (style == S) $ space >> m
+            inciIf (style == S) $
+              if needBreaks then space >> m
+              else m
         Trailing ->
           if needBreaks
             then newline >> inci m

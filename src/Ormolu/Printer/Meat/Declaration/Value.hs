@@ -23,6 +23,7 @@ where
 import Control.Monad
 import Data.Bool (bool)
 import Data.Choice qualified as Choice
+import Data.Either (isRight) -- ORISHA(let-blank-lines)
 import Data.Data hiding (Infix, Prefix)
 import Data.Function (on)
 import Data.Functor ((<&>))
@@ -110,7 +111,8 @@ p_matchGroup' placer render style mg@MG {..} = do
         _ -> dontUseBraces
         where
           bracesIfNecessary = if isEmptyMatchGroup mg then useBraces else ub
-  ob $ sepSemi (located' (ub . p_Match)) (unLoc mg_alts)
+  -- ORISHA(case-alt-blank-line): 'sepSemi2' instead of upstream 'sepSemi'.
+  ob $ sepSemi2 (located' (ub . p_Match)) (unLoc mg_alts)
   where
     p_Match m@Match {..} =
       p_match'
@@ -295,7 +297,11 @@ p_match' placer render style isInfix multAnn strictness m_pats GRHSs {..} = do
           bool (inciByFrac (-1 / 2)) id indentWhere $ do
             located (L localBindsWhereSpan ()) $ \_ -> txt "where"
           breakpoint
-          inciIf indentWhere $ p_hsLocalBinds grhssLocalBinds
+          -- ORISHA(let-blank-lines): a @where@ nested in a @let@ is not a
+          -- @let@ binding group.
+          inciIf indentWhere $
+            withBindContext BindDefault $
+              p_hsLocalBinds grhssLocalBinds
   inciIf indentBody $ do
     unless (length grhssGRHSs > 1) $
       case style of
@@ -305,7 +311,18 @@ p_match' placer render style isInfix multAnn strictness m_pats GRHSs {..} = do
         PatternBind -> space >> inci (txt "=")
         s | isCase s && hasGuards -> return ()
         _ -> space >> token'rarrow
-    switchLayout [patGrhssSpan] $
+    bindContext <- getBindContext
+    -- ORISHA(case-force-multiline): case and lambda-case bodies never collapse
+    -- onto the alternative's line.
+    -- ORISHA(bind-newline-after-equals): nor does a binding body onto its @=@,
+    -- except in a @do@-block @let@. Upstream always uses the source span here.
+    let switchLayout' = case style of
+          Case -> enterLayout MultiLine
+          LambdaCase -> enterLayout MultiLine
+          Function _ | bindContext /= BindDoLet -> enterLayout MultiLine
+          PatternBind | bindContext /= BindDoLet -> enterLayout MultiLine
+          _ -> switchLayout [patGrhssSpan]
+    switchLayout' $
       placeHanging placement p_body
     inci p_where
 
@@ -392,7 +409,8 @@ p_hsCmd' isApp s = \case
   HsCmdCase _ e mgroup ->
     p_case isApp s cmdPlacement p_hsCmd e mgroup
   HsCmdIf anns _ if' then' else' ->
-    p_if cmdPlacement p_hsCmd anns if' then' else'
+    -- ORISHA(else-if-chain): see 'p_if'.
+    p_if cmdPlacement p_hsCmd cmdAsIf anns if' then' else'
   HsCmdLet (letToken, _) localBinds c ->
     p_let (s == S) p_hsCmd letToken localBinds c
   HsCmdDo _ es -> do
@@ -551,7 +569,17 @@ p_hsLocalBinds = \case
           positionToBracing p $
             withSpacing (either p_valDecl p_sigDecl) item
         items' = sortBy (leftmost_smallest `on` getLocA) items
-    sitcc $ sepSemi p_item' (attachRelativePos items')
+    -- ORISHA(let-blank-lines): blank line between @let@ bindings, but not
+    -- between a type signature and the binding it belongs to. @where@ and
+    -- @do@-block @let@ groups keep upstream's single newline.
+    bindContext <- getBindContext
+    let isSig (_, L _ x) = isRight x
+        sepItems =
+          if bindContext == BindLet
+            then sepSemiWith $ \prev ->
+              if isSig prev then newline else newline >> newlineRaw
+            else sepSemi
+    sitcc $ sepItems p_item' (attachRelativePos items')
   HsValBinds _ _ -> notImplemented "HsValBinds"
   HsIPBinds epAnn (IPBinds _ xs) -> pseudoLocated epAnn $ do
     let p_ipBind (IPBind _ (L _ name) expr) = do
@@ -688,7 +716,16 @@ p_hsExpr' isApp s = \case
             MultiLine -> id
         ub $ do
           located func (p_hsExpr' Applicand s)
-          breakpoint
+          -- ORISHA(first-arg-same-line): upstream uses 'breakpoint' here, so a
+          -- multiline application always leaves the function alone on its line.
+          -- We keep the first argument with the function when it was written
+          -- there, so a break before it stays a break. A multiline first
+          -- argument always breaks, whatever the source says, since hanging one
+          -- off the function reads badly.
+          let firstArg = getLocA (NE.head args)
+          if isOneLineSpan firstArg && onTheSameLine (getLocA func) firstArg
+            then space
+            else breakpoint
           indentArg $ sep breakpoint (located' p_hsExpr) initp
         indentArg $ do
           unless (null initp) breakpoint
@@ -746,7 +783,8 @@ p_hsExpr' isApp s = \case
             Missing _ -> pure ()
         parens' =
           case boxity of
-            Boxed -> parens
+            -- ORISHA(spaced-tuples)
+            Boxed -> parensSpace
             Unboxed -> parensHash
     enclSpan <-
       fmap (flip RealSrcSpan Strict.Nothing) . maybeToList
@@ -763,7 +801,8 @@ p_hsExpr' isApp s = \case
   HsCase _ e mgroup ->
     p_case isApp s exprPlacement p_hsExpr e mgroup
   HsIf anns if' then' else' ->
-    p_if exprPlacement p_hsExpr anns if' then' else'
+    -- ORISHA(else-if-chain): see 'p_if'.
+    p_if exprPlacement p_hsExpr exprAsIf anns if' then' else'
   HsMultiIf _ guards -> do
     txt "if"
     breakpoint
@@ -783,7 +822,8 @@ p_hsExpr' isApp s = \case
       MonadComp -> p_listComp s es
       GhciStmtCtxt -> notImplemented "GhciStmtCtxt"
   ExplicitList _ xs ->
-    brackets s $
+    -- ORISHA(spaced-lists)
+    bracketsSpace s $
       sep commaDel (sitcc . located' p_hsExprListItem) xs
   RecordCon {..} -> do
     p_rdrName rcon_con
@@ -794,7 +834,8 @@ p_hsExpr' isApp s = \case
         dotdot = case rec_dotdot of
           Just {} -> [txt ".."]
           Nothing -> []
-    inci . recordBraces $
+    -- ORISHA(empty-braces-no-space)
+    inci . recordBracesOrEmpty (null fields && null dotdot) $
       sep commaDel sitcc (fields <> dotdot)
   RecordUpd {..} -> do
     located rupd_expr p_hsExpr
@@ -1047,7 +1088,8 @@ p_patSynBind PSB {..} = do
         let conSpans = getLocA . recordPatSynPatVar <$> xs
         switchLayout conSpans $ do
           unless (null xs) breakpointPreRecordBrace
-          recordBraces $
+          -- ORISHA(empty-braces-no-space)
+          recordBracesOrEmpty (null xs) $
             sep commaDel (p_rdrName . recordPatSynPatVar) xs
         rhs conSpans
     InfixCon l r -> do
@@ -1122,6 +1164,8 @@ p_if ::
   (body -> Placement) ->
   -- | Render
   (body -> R ()) ->
+  -- | ORISHA(else-if-chain): the parts of a branch that is itself an @if@
+  (body -> Maybe (AnnsIf, LHsExpr GhcPs, LocatedA body, LocatedA body)) ->
   -- | Annotations
   AnnsIf ->
   -- | If
@@ -1131,7 +1175,22 @@ p_if ::
   -- | Else
   LocatedA body ->
   R ()
-p_if placer render anns if' then' else' = do
+p_if placer render asIf = p_if' placer render asIf False
+
+-- | ORISHA(else-if-chain): 'p_if', told whether this @if@ is the @else@
+-- branch of an @else if@ chain.
+p_if' ::
+  (body -> Placement) ->
+  (body -> R ()) ->
+  (body -> Maybe (AnnsIf, LHsExpr GhcPs, LocatedA body, LocatedA body)) ->
+  -- | Whether this @if@ continues an @else if@ chain
+  Bool ->
+  AnnsIf ->
+  LHsExpr GhcPs ->
+  LocatedA body ->
+  LocatedA body ->
+  R ()
+p_if' placer render asIf inChain anns if' then' else' = do
   ifStyle <- getPrinterOpt poIfStyle
 
   txt "if"
@@ -1175,14 +1234,76 @@ p_if placer render anns if' then' else' = do
           IfIndented -> breakpoint >> inci m
           IfHanging -> switchLayout [getLocA if'] breakpoint >> m
 
-  hangIf $ do
-    locatedToken thenSpan "then"
-    space
-    placeBranch thenSpan then'
-    breakpoint
-    locatedToken elseSpan "else"
-    space
-    placeBranch elseSpan else'
+      -- ORISHA(else-if-chain): upstream always nests an @else if@ under the
+      -- @else@, so a chain staircases to the right. In a multiline @if@ whose
+      -- @else@ branch is itself an @if@ (with no comment in between), we put
+      -- @else if@, and every later @else@ of the chain, back at the column
+      -- of the first @if@ instead, so the chain reads flat:
+      --
+      -- > if a
+      -- >     then x
+      -- >
+      -- > else if b
+      -- >     then y
+      -- >
+      -- > else
+      -- >     z
+      --
+      -- @else@ at the @if@ column is valid in a @do@ block thanks to
+      -- @DoAndIfThenElse@ (on by default since Haskell2010).
+      chainedElse
+        | hasCommentsBetween elseSpan (getLocA else') = Nothing
+        | otherwise = asIf (unLoc else')
+
+      hasCommentsBetween tokenSpan bodySpan = fromMaybe False $ do
+        tokenRealSpan <- srcSpanToRealSrcSpan tokenSpan
+        bodyRealSpan <- srcSpanToRealSrcSpan bodySpan
+        pure $ any (betweenSpans tokenRealSpan bodyRealSpan) commentSpans
+
+      thenPart = do
+        locatedToken thenSpan "then"
+        space
+        placeBranch thenSpan then'
+
+      chainElse renderElse = do
+        hangIf thenPart
+        newline
+        newlineRaw -- ORISHA(else-blank-line)
+        locatedToken elseSpan "else"
+        space
+        renderElse
+
+  layout <- getLayout
+  case chainedElse of
+    Just (anns', if'', then'', else'')
+      | layout == MultiLine ->
+          chainElse . located else' $ \_ ->
+            p_if' placer render asIf True anns' if'' then'' else''
+    _
+      | layout == MultiLine && inChain ->
+          chainElse (placeBranch elseSpan else')
+    _ -> hangIf $ do
+      thenPart
+      breakpoint
+      -- ORISHA(else-blank-line): blank line before @else@ in a multiline @if@.
+      -- 'newlineRaw' is not layout-sensitive, so it must be guarded: in a
+      -- single-line layout it would split the @if@.
+      when (layout == MultiLine) newlineRaw
+      locatedToken elseSpan "else"
+      space
+      placeBranch elseSpan else'
+
+-- | ORISHA(else-if-chain): the parts of an @if@ expression, for 'p_if'.
+exprAsIf :: HsExpr GhcPs -> Maybe (AnnsIf, LHsExpr GhcPs, LHsExpr GhcPs, LHsExpr GhcPs)
+exprAsIf = \case
+  HsIf anns if' then' else' -> Just (anns, if', then', else')
+  _ -> Nothing
+
+-- | ORISHA(else-if-chain): the parts of an @if@ command, for 'p_if'.
+cmdAsIf :: HsCmd GhcPs -> Maybe (AnnsIf, LHsExpr GhcPs, LHsCmd GhcPs, LHsCmd GhcPs)
+cmdAsIf = \case
+  HsCmdIf anns _ if' then' else' -> Just (anns, if', then', else')
+  _ -> Nothing
 
 p_let ::
   -- | True if in do-block
@@ -1211,7 +1332,9 @@ p_let' inDo letLoc localBinds mBody = do
   inStyle <- getPrinterOpt poInStyle
   layout <- getLayout
   -- isAllInline = True if whole "let ... in ..." should be one line
-  let isAllInline = layout == SingleLine && (not inDo || isJust mBody)
+  -- ORISHA(let-in-newline): upstream also requires @not inDo || isJust mBody@;
+  -- we inline purely on layout, so a single-line @do@-block @let@ stays inline.
+  let isAllInline = layout == SingleLine
   -- isBlockInline = True if each "let ..." + "in ..." block should be one line
   let isBlockInline =
         case letStyle of
@@ -1237,9 +1360,9 @@ p_let' inDo letLoc localBinds mBody = do
         case inStyle of
           _ | inDo -> " in"
           InRightAlign -> " in"
-          InLeftAlign
-            | isBlockInline -> "in "
-            | otherwise -> "in"
+          -- ORISHA(let-in-newline): upstream emits @"in "@ for the inline
+          -- case; the body now starts on its own line, so no trailing space.
+          InLeftAlign -> "in"
           InNoSpace -> "in"
 
   -- helpers
@@ -1250,16 +1373,29 @@ p_let' inDo letLoc localBinds mBody = do
           else newline >> inci body
 
   sitcc $ do
-    block "let" (p_hsLocalBinds localBinds)
+    -- ORISHA(bind-newline-after-equals), ORISHA(let-blank-lines): mark the
+    -- binding group so a @do@-block @let@ keeps upstream's compact formatting.
+    block "let" $
+      withBindContext (if inDo then BindDoLet else BindLet) $
+        p_hsLocalBinds localBinds
 
     case mBody of
       Just body
         | isAllInline -> do
             space
             block "in" body
-        | otherwise -> do
+        -- ORISHA(let-in-newline): @in@ sits alone on its line and the body
+        -- follows on the next one, instead of @block inString body@. Not in a
+        -- @do@ block: there the body must stay indented past the statement
+        -- column, or @in@'s body parses as a new statement.
+        | inDo -> do
             newline
             block inString body
+        | otherwise -> do
+            newline
+            txt inString
+            newline
+            body
       Nothing -> pure ()
   where
     numLocalBinds =
@@ -1298,11 +1434,13 @@ p_pat' inAsPat = \case
     txt "!"
     located pat (p_pat' inAsPat)
   ListPat _ pats ->
-    brackets S $ sep commaDel (located' (p_pat' inAsPat)) pats
+    -- ORISHA(spaced-lists)
+    bracketsSpace S $ sep commaDel (located' (p_pat' inAsPat)) pats
   TuplePat _ pats boxing -> do
     let parens' =
           case boxing of
-            Boxed -> parens S
+            -- ORISHA(spaced-tuples)
+            Boxed -> parensSpace S
             Unboxed -> parensHash S
     parens' $ sep commaDel (sitcc . located' (p_pat' inAsPat)) pats
   OrPat _ pats -> do
@@ -1321,7 +1459,8 @@ p_pat' inAsPat = \case
         let f = \case
               Nothing -> txt ".."
               Just x -> located x p_pat_hsFieldBind
-        inci . recordBraces . sep commaDel f $
+        -- ORISHA(empty-braces-no-space)
+        inci . recordBracesOrEmpty (null fields && isNothing dotdot) . sep commaDel f $
           case dotdot of
             Nothing -> Just <$> fields
             Just (L _ (RecFieldsDotDot n)) -> (Just <$> take n fields) ++ [Nothing]
@@ -1552,7 +1691,12 @@ exprPlacement = \case
   HsDo _ (MDoExpr _) _ -> Hanging
   OpApp _ _ op y ->
     case (fmap getOpNameStr . getOpName . unLoc) op of
+      -- ORISHA(apply-op-like-dollar): upstream only lets @$@ inherit its right
+      -- operand's placement. @<|@ is the same apply-right operator, so it gets
+      -- the same treatment; 'exprPlacement' is pure and cannot consult the
+      -- fixity map, hence the name check.
       Just "$" -> exprPlacement (unLoc y)
+      Just "<|" -> exprPlacement (unLoc y)
       _ -> Normal
   HsApp _ _ y -> exprPlacement (unLoc y)
   HsProc _ p _ ->
@@ -1593,7 +1737,9 @@ p_hsExprListItem e = do
   p_hsExpr e
   where
     spaces n = txt $ Text.replicate n " "
+    -- ORISHA(no-pad-nested-listlike): upstream returns True for both, adding
+    -- alignment padding to nested lists/tuples. We never pad them.
     listLike = \case
-      ExplicitList {} -> True
-      ExplicitTuple {} -> True
+      ExplicitList {} -> False
+      ExplicitTuple {} -> False
       _ -> False

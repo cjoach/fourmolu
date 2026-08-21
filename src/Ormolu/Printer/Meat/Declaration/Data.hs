@@ -94,6 +94,11 @@ p_dataDecl style name tyVars getTyVarLoc p_tyVar fixity HsDataDefn {..} = do
         NewTypeCon a -> [a]
         DataTypeCons _ as -> as
       gadt = isJust dd_kindSig || any (isGadt . unLoc) dd_cons'
+      -- ORISHA(rhs-newline-after-equals): a @newtype@ has no @|@ to align, so
+      -- its @=@ stays on the head line like a type synonym's.
+      isNewType = case dd_cons of
+        NewTypeCon {} -> True
+        DataTypeCons {} -> False
   case dd_cons' of
     [] -> pure ()
     first_dd_cons : _ ->
@@ -104,30 +109,33 @@ p_dataDecl style name tyVars getTyVarLoc p_tyVar fixity HsDataDefn {..} = do
             txt "where"
           breakpoint
           sepSemi (located' (p_conDecl (Isn't #singleRecCon))) dd_cons'
-        else switchLayout (getLocA name : (getLocA <$> dd_cons')) . inci $ do
+        -- ORISHA(data-force-multiline): upstream always picks the layout from
+        -- the source spans, so a @data@ that fits on one line stays there. For
+        -- @data@ we enter 'MultiLine' instead, which puts @=@ (and each @|@,
+        -- via @s@ below) on its own line for every declaration.
+        else enterLayout MultiLine . inci $ do
           let singleRecCon =
                 case dd_cons' of
                   [L _ ConDeclH98 {con_args = RecCon {}}] -> Is #singleRecCon
                   _ -> Isn't #singleRecCon
-              compactLayoutAroundEquals =
-                onTheSameLine
-                  (getLocA name)
-                  (combineSrcSpans' (conDeclConsSpans (unLoc first_dd_cons)))
-              conDeclConsSpans = \case
-                ConDeclGADT {..} -> getLocA <$> con_names
-                ConDeclH98 {..} -> getLocA con_name :| []
           -- A constructor documented with @--@ lines cannot share a line
           -- with anything. One documented with @{- | … -}@ can, so it is
           -- laid out as though it were undocumented.
           lineHaddocks <- consHaveLineHaddocks dd_cons'
-          if lineHaddocks
-            then newline
-            else
-              if Choice.isTrue singleRecCon && compactLayoutAroundEquals
-                then space
+          -- ORISHA(data-force-multiline): upstream keeps @=@ on the head line
+          -- when a lone record constructor already started there
+          -- (@singleRecCon && compactLayoutAroundEquals@); we always break.
+          -- ORISHA(rhs-newline-after-equals): @data@ puts @=@ on the new line so
+          -- it aligns with the @|@ separators; @newtype@ has none, so its @=@
+          -- ends the head line and the constructor starts the next.
+          if isNewType
+            then space >> txt "=" >> newline
+            else do
+              if lineHaddocks
+                then newline
                 else breakpoint
-          txt "="
-          space
+              txt "="
+              space
           layout <- getLayout
           fourmoluSitccFix <- getIsFourmoluMultiHaddockPrintStyle first_dd_cons
           let s =
@@ -139,7 +147,9 @@ p_dataDecl style name tyVars getTyVarLoc p_tyVar fixity HsDataDefn {..} = do
                   then sitcc
                   else id
           sep s (sitcc' . located' (p_conDecl singleRecCon)) dd_cons'
-  unless (null dd_derivs) breakpoint
+  -- ORISHA(deriving-own-line): upstream uses 'breakpoint', keeping the deriving
+  -- clause on the last constructor's line when the declaration fits.
+  unless (null dd_derivs) newline
 
   sortDerivingClauses <- getPrinterOpt poSortDerivingClauses
   let sortedDeriving = if sortDerivingClauses then sortOn (derivingStrategyKey . fmap unLoc . deriv_clause_strategy . unLoc) dd_derivs else dd_derivs
@@ -185,7 +195,9 @@ p_conDecl _ decl@ConDeclGADT {..} = do
       getLocA con_res_ty : case con_g_args of
         PrefixConGADT NoExtField xs -> getLocA . cdf_type <$> xs
         RecConGADT _ x -> [getLocA x]
-p_conDecl singleRecCon ConDeclH98 {..} =
+-- ORISHA(data-single-con-indent): 'singleRecCon' is deliberately ignored, see
+-- the RecCon branch below.
+p_conDecl _ ConDeclH98 {..} =
   case con_args of
     PrefixCon xs -> do
       renderConDoc
@@ -202,7 +214,11 @@ p_conDecl singleRecCon ConDeclH98 {..} =
         p_rdrName con_name
         recordStyle <- getPrinterOpt poRecordStyle
         if recordStyle == RecordStyleKnr then space else breakpoint
-        inciIf (Choice.isFalse singleRecCon) (located l p_hsConDeclRecFields)
+        -- ORISHA(data-single-con-indent): upstream uses
+        -- @inciIf (Choice.isFalse singleRecCon)@, skipping the indent for a
+        -- single-constructor record; we always indent so one- and
+        -- many-constructor data agree.
+        inci (located l p_hsConDeclRecFields)
     InfixCon l r -> do
       -- Render these manually.
       let larg_doc = cdf_doc l
