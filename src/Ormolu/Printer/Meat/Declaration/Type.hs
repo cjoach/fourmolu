@@ -16,7 +16,6 @@ import GHC.Hs.Type
 import GHC.Parser.Annotation
 import GHC.Types.Fixity
 import GHC.Types.Name.Reader
-import GHC.Types.SrcLoc
 import Ormolu.Printer.Combinators
 import Ormolu.Printer.Meat.Common
 import Ormolu.Printer.Meat.Type
@@ -46,7 +45,7 @@ p_synDecl name fixity HsQTvs {..} t = do
   inci $ do
     space
     equals
-    if hasDocStrings (unLoc t)
-      then newline
-      else breakpoint
+    -- ORISHA(rhs-newline-after-equals): upstream uses 'breakpoint', so a short
+    -- synonym stays on one line. The RHS always starts on its own line.
+    newline
     located t p_hsType

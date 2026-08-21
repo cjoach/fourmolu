@@ -15,7 +15,7 @@ where
 import Control.Monad
 import Data.Choice (pattern Without)
 import Data.Foldable (for_, traverse_)
-import Data.List (inits)
+import Data.List (inits, sortOn) -- ORISHA(sort-exports): sortOn
 import Data.Text qualified as T
 import GHC.Hs
 import GHC.LanguageExtensions.Type
@@ -26,17 +26,34 @@ import Ormolu.Printer.Combinators
 import Ormolu.Printer.Meat.Common
 import Ormolu.Printer.Meat.Declaration.Warning
 import Ormolu.Utils (RelativePos (..), attachRelativePos)
+-- ORISHA(sort-exports)
+import GHC.Types.Name.Reader (rdrNameOcc)
+import GHC.Types.Name.Occurrence (occNameString, occName, isSymOcc)
 
 p_hsmodExports :: [LIE GhcPs] -> R ()
 p_hsmodExports xs =
-  enterMultilineLayoutIfContainsDocEntries xs $
+  enterMultilineLayoutIfContainsDocEntries sortedXs $
     parens' False $ do
       layout <- getLayout
       sep
         breakpoint
         (\(isAllPrevDoc, p, l) -> sitcc (located (addDocSrcSpan l) (p_lie layout isAllPrevDoc p)))
-        (withAllPrevDoc $ attachRelativePos xs)
+        (withAllPrevDoc $ attachRelativePos sortedXs) -- ORISHA(sort-exports)
   where
+    -- ORISHA(sort-exports): upstream renders the export list in source order;
+    -- we sort it -- modules first, then alphabetical names, then operators.
+    sortedXs = sortOn (ieKey . unLoc) xs
+    ieKey :: IE GhcPs -> (Int, String)
+    ieKey = \case
+      IEModuleContents _ (L _ n) -> (0, moduleNameString n)
+      IEVar _ (L _ n) _ -> (sortKey n, wrappedNameStr n)
+      IEThingAbs _ (L _ n) _ -> (sortKey n, wrappedNameStr n)
+      IEThingAll _ (L _ n) _ -> (sortKey n, wrappedNameStr n)
+      IEThingWith _ (L _ n) _ _ _ -> (sortKey n, wrappedNameStr n)
+      _ -> (3, "")
+    sortKey name = if isSymOcc (occName name) then 2 else 1
+    wrappedNameStr = occNameString . rdrNameOcc . ieWrappedName
+
     -- In order to correctly set the layout when a doc comment is present.
     addDocSrcSpan lie@(L l ie) = case ieExportDoc ie of
       Nothing -> lie
@@ -116,13 +133,14 @@ p_lie encLayout isAllPrevDoc relativePos = \case
   IEThingAll _ l1 exportDoc -> do
     withComma $ do
       located l1 p_ieWrappedName
-      space
+      -- ORISHA(import-type-no-space): @Foo(..)@, not @Foo (..)@.
       txt "(..)"
     p_exportDoc exportDoc
   IEThingWith _ l1 w xs exportDoc -> sitcc $ do
     withComma $ do
       located l1 p_ieWrappedName
-      breakIfNotDiffFriendly
+      -- ORISHA(import-type-no-space): no break/space between the type and its
+      -- constructor list; upstream calls 'breakIfNotDiffFriendly' here.
       inci $ do
         let names :: [R ()]
             names = located' p_ieWrappedName <$> xs

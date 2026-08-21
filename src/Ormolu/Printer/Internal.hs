@@ -18,6 +18,7 @@ module Ormolu.Printer.Internal
     atom,
     space,
     newline,
+    newlineRaw, -- ORISHA(else-blank-line): re-exported for Combinators
     declNewline,
     multilineCommentNewline,
     newlineLiteral,
@@ -40,6 +41,10 @@ module Ormolu.Printer.Internal
     useBraces,
     dontUseBraces,
     canUseBraces,
+    -- ORISHA(bind-newline-after-equals)
+    BindContext (..),
+    withBindContext,
+    getBindContext,
 
     -- * Special helpers for comment placement
     CommentPosition (..),
@@ -113,6 +118,10 @@ data RC = RC
     rcEnclosingSpans :: [RealSrcSpan],
     -- | Whether the last expression in the layout can use braces
     rcCanUseBraces :: Bool,
+    -- | ORISHA(bind-newline-after-equals): which kind of binding group we are
+    -- rendering, so @let@ bindings can be formatted differently from @do@-block
+    -- @let@ bindings.
+    rcBindContext :: BindContext,
     rcPrinterOpts :: PrinterOptsTotal,
     rcLocalModules :: Set ModuleName,
     -- | Enabled extensions
@@ -207,6 +216,7 @@ runR (R m) sstream cstream printerOpts localModules sourceType extensions module
           rcLayout = MultiLine,
           rcEnclosingSpans = [],
           rcCanUseBraces = False,
+          rcBindContext = BindDefault,
           rcPrinterOpts = printerOpts,
           rcLocalModules = localModules,
           rcExtensions = extensions,
@@ -718,6 +728,20 @@ dontUseBraces (R r) = R (local (\i -> i {rcCanUseBraces = False}) r)
 -- | Return 'True' if we can use braces in this context.
 canUseBraces :: R Bool
 canUseBraces = R (asks rcCanUseBraces)
+
+-- | ORISHA(bind-newline-after-equals): the kind of binding group being
+-- rendered. Top-level and @where@ bindings use 'BindDefault'.
+data BindContext
+  = BindDefault
+  | BindLet
+  | BindDoLet
+  deriving (Eq)
+
+withBindContext :: BindContext -> R () -> R ()
+withBindContext ctx (R r) = R (local (\i -> i {rcBindContext = ctx}) r)
+
+getBindContext :: R BindContext
+getBindContext = R (asks rcBindContext)
 
 ----------------------------------------------------------------------------
 -- Extensions

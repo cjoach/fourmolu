@@ -137,10 +137,17 @@ p_exprOpTree s t@(OpBranches exprs@(firstExpr :| otherExprs) ops) = do
       -- ever-deepening indentation, so we fall back to the leading-operator
       -- layout. A single hard splitter is exempt: it does not form a pyramid
       -- and trailing is the idiomatic way to introduce its operand.
+      -- ORISHA(trailing-op-into-let): upstream counts only 'exprPlacement'
+      -- hanging forms here, so a chain ending in @let ... in@ falls back to
+      -- leading operators. Our @let@ always renders as a block (see
+      -- ORISHA(let-in-newline)), so it introduces an operand just like a @do@.
       chainEndsInHangingForm =
         case rightMostNode t of
-          OpNode (L _ n) -> exprPlacement n == Hanging
+          OpNode (L _ n) -> exprPlacement n == Hanging || isLetExpr n
           _ -> False
+      isLetExpr = \case
+        HsLet {} -> True
+        _ -> False
       isSingleOperator = case ops of
         [_] -> True
         _ -> False

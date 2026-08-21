@@ -99,7 +99,10 @@ p_hsType = \case
     let parens' =
           case tsort of
             HsUnboxedTuple -> parensHash N
-            HsBoxedOrConstraintTuple -> parens N
+            -- ORISHA(spaced-tuples): pad boxed tuples, except @()@.
+            HsBoxedOrConstraintTuple ->
+              if null xs then parens N
+              else parensSpace N
      in parens' $ sep commaDel (sitcc . located' p_hsType) xs
   HsSumTy _ xs ->
     parensHash N $
@@ -211,8 +214,9 @@ p_hsContext :: HsContext GhcPs -> R ()
 p_hsContext = p_hsContext' p_hsType
 
 p_hsConDeclRecFields :: [LHsConDeclRecField GhcPs] -> R ()
+-- ORISHA(empty-braces-no-space)
 p_hsConDeclRecFields xs =
-  recordBraces $ sep commaDel (sitcc . located' p_hsConDeclRecField) xs
+  recordBracesOrEmpty (null xs) $ sep commaDel (sitcc . located' p_hsConDeclRecField) xs
 
 p_hsConDeclRecField :: HsConDeclRecField GhcPs -> R ()
 p_hsConDeclRecField field@HsConDeclRecField {..} = withFieldHaddocks $ do
